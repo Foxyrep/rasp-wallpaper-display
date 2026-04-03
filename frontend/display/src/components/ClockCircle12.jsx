@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import WeatherDisplay from './WeatherDisplay'
 
-function ClockCircle12({ showDate, showWeekday }) {
+function ClockCircle12({ showDate, showWeekday, weatherData }) {
   const [time, setTime] = useState(new Date())
 
   useEffect(() => {
@@ -24,6 +25,7 @@ function ClockCircle12({ showDate, showWeekday }) {
 
   return (
     <div className="clock-container">
+      <WeatherDisplay weatherData={weatherData} />
       <svg className="circle-clock-svg" viewBox="0 0 200 200">
         {/* Outer ring */}
         <circle className="clock-face" cx="100" cy="100" r="95" />

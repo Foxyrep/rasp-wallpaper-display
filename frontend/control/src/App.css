@@ -89,12 +89,17 @@ input[type="number"] {
 }
 
 select:focus,
-input[type="number"]:focus {
+input[type="number"]:focus,
+input[type="text"]:focus {
   border-color: #4a90d9;
 }
 
 input[type="number"] {
   max-width: 120px;
+}
+
+input[type="text"].text-input {
+  max-width: 100%;
 }
 
 /* Toggle switch */

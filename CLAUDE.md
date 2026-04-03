@@ -55,17 +55,15 @@ WallpaperManager.jsx — 上传/删除/轮播配置
 ClockSettings.jsx — 风格选择、日期显示
 启动: ./start.sh 一键启动所有服务，--start-fullscreen 打开显示页面，ESC 退出全屏，Ctrl+C 终止。
 
-## v0.0.2待实现：
-- 在时钟功能中新增一个天气显示功能，可以在控制面板的时钟功能中选择是否开启，以及显示单日还是三天
-- 使用高德天气API，配置如下（将其中的key和city和extensions配置到控制面板中，交给用户配置）：
-    key = "d294b6e594db19b11580209d4ab003fd"  # 默认
-    city = "510116"  # 默认成都双流区（我的位置）adcode
-    extensions = "all"  # all为含预报，不传这个参数就只查当天
-    url = f"https://restapi.amap.com/v3/weather/weatherInfo?key={key}&city={city}&extensions={extensions}"
-    r = requests.get(url)
+## v0.0.2已实现功能：
+后端 (backend/)
+routers/weather.py — 天气API路由，支持高德天气API，可配置单日/三天预报
 
-    返回结构你需要现场调用一下这个接口看看。
-- 如果用户不配置extensions，只显示当天天气
-- 如果用户配置extensions = "all"，显示三天的天气
-- 在时间上方显示
-- 显示格式为 今天/明天/后天+天气图标+天气文本+温度范围，天气图标你可以下载一些常用的
+显示页面 (frontend/display/)
+components/WeatherDisplay.jsx — 天气显示组件，支持天气图标映射
+三个时钟组件均已集成天气显示（在时钟上方）
+
+控制面板 (frontend/control/)
+components/WeatherSettings.jsx — 天气配置组件，可开启/关闭天气、选择显示天数、配置API Key和城市编码
+
+## v0.0.3待实现：

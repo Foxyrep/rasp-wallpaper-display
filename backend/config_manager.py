@@ -21,6 +21,12 @@ DEFAULT_CONFIG = {
         "show_date": True,
         "show_weekday": True,
     },
+    "weather": {
+        "enabled": False,
+        "show_days": 1,  # 1 = 今天, 3 = 三天
+        "api_key": "d294b6e594db19b11580209d4ab003fd",
+        "city": "510116",
+    },
 }
 
 

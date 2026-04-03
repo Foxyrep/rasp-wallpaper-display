@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './App.css'
 import WallpaperDisplay from './components/WallpaperDisplay'
 import ClockCircle12 from './components/ClockCircle12'
@@ -11,13 +11,16 @@ const DEFAULT_CONFIG = {
   auto_switch_duration: 30,
   wallpaper: { images: [], auto_rotate: true, rotate_interval: 60 },
   clock: { style: 'circle12', show_date: true, show_weekday: true },
+  weather: { enabled: false, show_days: 1 },
 }
 
 function App() {
   const [config, setConfig] = useState(DEFAULT_CONFIG)
+  const [weatherData, setWeatherData] = useState(null)
   const [activeMode, setActiveMode] = useState('wallpaper')
   const wsRef = useRef(null)
   const autoSwitchTimerRef = useRef(null)
+  const weatherTimerRef = useRef(null)
 
   useEffect(() => {
     const ws = new WebSocket(
@@ -38,6 +41,25 @@ function App() {
     return () => ws.close()
   }, [])
 
+  // Fetch weather periodically
+  useEffect(() => {
+    const fetchWeather = async () => {
+      try {
+        const res = await fetch('/api/weather')
+        if (res.ok) {
+          const data = await res.json()
+          setWeatherData(data)
+        }
+      } catch {}
+    }
+
+    fetchWeather()
+    weatherTimerRef.current = setInterval(fetchWeather, 10 * 60 * 1000) // refresh every 10 min
+    return () => {
+      if (weatherTimerRef.current) clearInterval(weatherTimerRef.current)
+    }
+  }, [config.weather?.enabled, config.weather?.show_days, config.weather?.api_key, config.weather?.city])
+
   // Auto switch logic
   useEffect(() => {
     if (autoSwitchTimerRef.current) {
@@ -52,7 +74,6 @@ function App() {
       }, duration)
     }
 
-    // Set initial active mode based on config
     if (!config.auto_switch) {
       setActiveMode(config.mode === 'auto' ? 'wallpaper' : config.mode)
     } else {
@@ -67,6 +88,7 @@ function App() {
   const clockProps = {
     showDate: config.clock.show_date,
     showWeekday: config.clock.show_weekday,
+    weatherData: weatherData?.enabled ? weatherData : null,
   }
 
   const renderClock = () => {

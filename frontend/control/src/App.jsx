@@ -3,23 +3,27 @@ import './App.css'
 import SystemSettings from './components/SystemSettings'
 import WallpaperManager from './components/WallpaperManager'
 import ClockSettings from './components/ClockSettings'
+import WeatherSettings from './components/WeatherSettings'
 
 function App() {
   const [systemConfig, setSystemConfig] = useState(null)
   const [wallpaperConfig, setWallpaperConfig] = useState(null)
   const [clockConfig, setClockConfig] = useState(null)
+  const [weatherConfig, setWeatherConfig] = useState(null)
   const [loading, setLoading] = useState(true)
 
   const fetchData = async () => {
     try {
-      const [sysRes, wpRes, clockRes] = await Promise.all([
+      const [sysRes, wpRes, clockRes, weatherRes] = await Promise.all([
         fetch('/api/system'),
         fetch('/api/wallpapers'),
         fetch('/api/clock'),
+        fetch('/api/weather/config'),
       ])
       setSystemConfig(await sysRes.json())
       setWallpaperConfig(await wpRes.json())
       setClockConfig(await clockRes.json())
+      setWeatherConfig(await weatherRes.json())
     } catch (e) {
       console.error('Failed to fetch config:', e)
     } finally {
@@ -66,6 +70,15 @@ function App() {
             config={clockConfig}
             onUpdate={(data) => {
               setClockConfig({ ...clockConfig, ...data })
+            }}
+          />
+        </section>
+
+        <section className="settings-section">
+          <WeatherSettings
+            config={weatherConfig}
+            onUpdate={(data) => {
+              setWeatherConfig({ ...weatherConfig, ...data })
             }}
           />
         </section>
