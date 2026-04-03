@@ -1,3 +1,11 @@
+# Node
+node_modules/
+dist/
+
+# Project data
+data/
+uploads/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
