@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import WeatherDisplay from './WeatherDisplay'
 
 function CounterDigit({ digit }) {
   return (
@@ -9,7 +8,7 @@ function CounterDigit({ digit }) {
   )
 }
 
-function ClockCounter({ showDate, showWeekday, weatherData }) {
+function ClockCounter({ showDate, showWeekday }) {
   const [time, setTime] = useState(new Date())
 
   useEffect(() => {
@@ -32,7 +31,6 @@ function ClockCounter({ showDate, showWeekday, weatherData }) {
 
   return (
     <div className="clock-container counter-clock-wrapper">
-      <WeatherDisplay weatherData={weatherData} />
       <div className="counter-clock">
         {digits.map((d, i) =>
           d === ':' ? (

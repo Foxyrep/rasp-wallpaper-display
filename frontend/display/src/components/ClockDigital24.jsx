@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react'
-import WeatherDisplay from './WeatherDisplay'
 
-function ClockDigital24({ showDate, showWeekday, weatherData }) {
+function ClockDigital24({ showDate, showWeekday }) {
   const [time, setTime] = useState(new Date())
 
   useEffect(() => {
@@ -20,7 +19,6 @@ function ClockDigital24({ showDate, showWeekday, weatherData }) {
         <div className="digital-time">
           {hours}:{minutes}:{seconds}
         </div>
-        <WeatherDisplay weatherData={weatherData} />
         {(showDate || showWeekday) && (
           <div className="digital-date">
             {showDate && `${time.getFullYear()}/${time.getMonth() + 1}/${time.getDate()}`}

@@ -4,6 +4,7 @@ import WallpaperDisplay from './components/WallpaperDisplay'
 import ClockCircle12 from './components/ClockCircle12'
 import ClockDigital24 from './components/ClockDigital24'
 import ClockCounter from './components/ClockCounter'
+import WeatherDisplay from './components/WeatherDisplay'
 
 const DEFAULT_CONFIG = {
   mode: 'wallpaper',
@@ -54,7 +55,7 @@ function App() {
     }
 
     fetchWeather()
-    weatherTimerRef.current = setInterval(fetchWeather, 10 * 60 * 1000) // refresh every 10 min
+    weatherTimerRef.current = setInterval(fetchWeather, 10 * 60 * 1000)
     return () => {
       if (weatherTimerRef.current) clearInterval(weatherTimerRef.current)
     }
@@ -88,7 +89,6 @@ function App() {
   const clockProps = {
     showDate: config.clock.show_date,
     showWeekday: config.clock.show_weekday,
-    weatherData: weatherData?.enabled ? weatherData : null,
   }
 
   const renderClock = () => {
@@ -102,8 +102,15 @@ function App() {
     }
   }
 
+  const showWeather = activeMode === 'clock' && weatherData?.enabled
+
   return (
     <div className="display-container">
+      {showWeather && (
+        <div className="weather-overlay">
+          <WeatherDisplay weatherData={weatherData} />
+        </div>
+      )}
       {activeMode === 'wallpaper' ? (
         <WallpaperDisplay
           images={config.wallpaper.images}

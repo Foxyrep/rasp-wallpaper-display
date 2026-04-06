@@ -76,14 +76,18 @@ echo "按 Ctrl+C 停止所有服务"
 echo ""
 
 # Open display page in browser (fullscreen, not kiosk)
+# Open control panel in a separate window
 BROWSER=$(which chromium-browser 2>/dev/null || which chromium 2>/dev/null || which firefox 2>/dev/null || echo "")
 if [ -n "$BROWSER" ]; then
     if [[ "$BROWSER" == *"chromium"* ]]; then
         "$BROWSER" --start-fullscreen http://localhost:8000 &
+        sleep 1
+        "$BROWSER" http://localhost:8001 &
     else
         "$BROWSER" http://localhost:8000 &
+        sleep 1
+        "$BROWSER" http://localhost:8001 &
     fi
-    BROWSER_PID=$!
 fi
 
 # Wait for any process to exit
