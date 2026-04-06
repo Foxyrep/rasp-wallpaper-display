@@ -66,4 +66,33 @@ components/WeatherDisplay.jsx — 天气显示组件，支持天气图标映射
 控制面板 (frontend/control/)
 components/WeatherSettings.jsx — 天气配置组件，可开启/关闭天气、选择显示天数、配置API Key和城市编码
 
-## v0.0.3待实现：
+## v0.0.3已实现功能：
+Docker容器化部署：
+- Dockerfile — 多阶段构建：Node.js编译前端 + Python+nginx运行时
+- nginx.conf — 反向代理：8000端口显示页面、8001端口控制面板、/api和/ws转发到后端5000
+- entrypoint.sh — 容器启动脚本，启动后端和nginx
+- .dockerignore — 排除不必要的文件
+
+Docker部署方式（在linux_x86开发机上交叉编译aarch64镜像）：
+```bash
+# 1. 创建 buildx 构建器（首次）
+docker buildx create --name mybuilder --use
+docker buildx inspect --bootstrap
+
+# 2. 构建并导出为 tar 文件
+docker buildx build --platform linux/arm64 -t rasp-wallpaper:v0.0.3 --output type=docker,dest=rasp-wallpaper-v0.0.3.tar .
+
+# 3. 拷贝到树莓派
+scp rasp-wallpaper-v0.0.3.tar pi@<树莓派IP>:~/
+
+# 4. 在树莓派上加载并运行
+docker load -i rasp-wallpaper-v0.0.3.tar
+docker run -d --name wallpaper-display \
+  -p 5000:5000 -p 8000:8000 -p 8001:8001 \
+  -v wallpaper-data:/app/data \
+  -v wallpaper-uploads:/app/uploads \
+  --restart unless-stopped \
+  rasp-wallpaper:v0.0.3
+```
+
+## v0.0.4待实现：

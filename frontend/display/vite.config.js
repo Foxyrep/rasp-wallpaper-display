@@ -5,8 +5,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     proxy: {
-      '/api': 'http://localhost:5000',
-      '/ws': { target: 'ws://localhost:5000', ws: true },
+      '/api': 'http://0.0.0.0:5000',
+      '/ws': { target: 'ws://0.0.0.0:5000', ws: true },
     },
   },
 })
