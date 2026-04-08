@@ -35,6 +35,7 @@ function SystemSettings({ config, onUpdate }) {
         >
           <option value="wallpaper">壁纸</option>
           <option value="clock">时钟</option>
+          <option value="soundviz">环境声可视化</option>
           <option value="auto">自动切换</option>
         </select>
       </div>

@@ -95,4 +95,30 @@ docker run -d --name wallpaper-display \
   rasp-wallpaper:v0.0.3
 ```
 
-## v0.0.4待实现：
+## v0.0.4已实现功能：
+新增”环境声可视化”模式，作为继壁纸、时钟之后的第三个显示功能
+后端 (backend/)
+routers/soundviz.py — 环境声可视化配置API（风格、颜色、灵敏度）
+config_manager.py — 新增 soundviz 默认配置块
+
+显示页面 (frontend/display/)
+components/SoundVisualizer.jsx — 核心可视化组件，Web Audio API + Canvas 渲染
+支持3种风格：频谱柱状(bar)、环形波形(circular)、流动波线(wave)
+仅在该模式激活时请求麦克风，切走时自动释放
+关闭了回声消除、噪声抑制、自动增益以获取最真实的环境声
+
+控制面板 (frontend/control/)
+components/SoundVizSettings.jsx — 可视化风格选择、主题颜色选择、灵敏度调节
+SystemSettings.jsx — 模式下拉框新增”环境声可视化”选项
+
+注意：环境声可视化不参与自动切换（auto-switch仅在壁纸和时钟间轮换）
+
+实现原理：
+- 未使用第三方开源库，完全基于浏览器原生API实现
+- 音频采集：navigator.mediaDevices.getUserMedia 获取麦克风输入，关闭了回声消除/噪声抑制/自动增益
+- 音频分析：Web Audio API（AudioContext + AnalyserNode），fftSize=2048，getByteFrequencyData获取频域数据用于bar和circular，getByteTimeDomainData获取时域数据用于wave
+- 渲染：HTML5 Canvas 2D，requestAnimationFrame驱动60fps渲染循环
+- 麦克风生命周期：仅在soundviz模式激活时请求并持有麦克风，切走其他模式时组件卸载自动释放stream和AudioContext
+- 彩色模式：通过HSL色轮映射实现RGB渐变，无需额外依赖
+
+## v0.0.5待实现：

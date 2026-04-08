@@ -27,6 +27,11 @@ DEFAULT_CONFIG = {
         "api_key": "d294b6e594db19b11580209d4ab003fd",
         "city": "510116",
     },
+    "soundviz": {
+        "style": "bar",       # "bar" | "circular" | "wave"
+        "color": "#00ff88",
+        "sensitivity": 1.0,
+    },
 }
 
 
@@ -35,11 +40,22 @@ def _ensure_dirs():
     UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _deep_merge(base: dict, override: dict) -> dict:
+    result = base.copy()
+    for key, value in override.items():
+        if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+            result[key] = _deep_merge(result[key], value)
+        else:
+            result[key] = value
+    return result
+
+
 def load_config() -> dict:
     _ensure_dirs()
     if CONFIG_PATH.exists():
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            return json.load(f)
+            saved = json.load(f)
+        return _deep_merge(DEFAULT_CONFIG, saved)
     save_config(DEFAULT_CONFIG)
     return DEFAULT_CONFIG.copy()
 

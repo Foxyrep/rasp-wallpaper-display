@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from config_manager import load_config
 from ws_manager import manager
-from routers import system, wallpaper, clock, weather
+from routers import system, wallpaper, clock, weather, soundviz
 
 app = FastAPI(title="Rasp Wallpaper Display")
 
@@ -21,6 +21,7 @@ app.include_router(system.router)
 app.include_router(wallpaper.router)
 app.include_router(clock.router)
 app.include_router(weather.router)
+app.include_router(soundviz.router)
 
 
 @app.websocket("/ws")

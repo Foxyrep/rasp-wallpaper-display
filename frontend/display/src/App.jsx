@@ -5,6 +5,7 @@ import ClockCircle12 from './components/ClockCircle12'
 import ClockDigital24 from './components/ClockDigital24'
 import ClockCounter from './components/ClockCounter'
 import WeatherDisplay from './components/WeatherDisplay'
+import SoundVisualizer from './components/SoundVisualizer'
 
 const DEFAULT_CONFIG = {
   mode: 'wallpaper',
@@ -13,6 +14,7 @@ const DEFAULT_CONFIG = {
   wallpaper: { images: [], auto_rotate: true, rotate_interval: 60 },
   clock: { style: 'circle12', show_date: true, show_weekday: true },
   weather: { enabled: false, show_days: 1 },
+  soundviz: { style: 'bar', color: '#00ff88', sensitivity: 1.0 },
 }
 
 function App() {
@@ -104,6 +106,28 @@ function App() {
 
   const showWeather = activeMode === 'clock' && weatherData?.enabled
 
+  const renderContent = () => {
+    if (activeMode === 'soundviz') {
+      return (
+        <SoundVisualizer
+          style={config.soundviz?.style || 'bar'}
+          color={config.soundviz?.color || '#00ff88'}
+          sensitivity={config.soundviz?.sensitivity || 1.0}
+        />
+      )
+    }
+    if (activeMode === 'wallpaper') {
+      return (
+        <WallpaperDisplay
+          images={config.wallpaper.images}
+          autoRotate={config.wallpaper.auto_rotate}
+          rotateInterval={config.wallpaper.rotate_interval}
+        />
+      )
+    }
+    return renderClock()
+  }
+
   return (
     <div className="display-container">
       {showWeather && (
@@ -111,15 +135,7 @@ function App() {
           <WeatherDisplay weatherData={weatherData} />
         </div>
       )}
-      {activeMode === 'wallpaper' ? (
-        <WallpaperDisplay
-          images={config.wallpaper.images}
-          autoRotate={config.wallpaper.auto_rotate}
-          rotateInterval={config.wallpaper.rotate_interval}
-        />
-      ) : (
-        renderClock()
-      )}
+      {renderContent()}
     </div>
   )
 }
