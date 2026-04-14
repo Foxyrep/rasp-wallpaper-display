@@ -16,6 +16,12 @@ const COLORS = [
   { id: 'rainbow', name: '彩' },
 ]
 
+const PERFORMANCE_MODES = [
+  { id: 'power_save', name: '省电', desc: '最低资源占用，优先流畅' },
+  { id: 'balanced', name: '均衡', desc: '推荐默认档位' },
+  { id: 'quality', name: '高画质', desc: '更细腻，但更吃性能' },
+]
+
 function SoundVizSettings({ config, onUpdate }) {
   const [saving, setSaving] = useState(false)
 
@@ -97,6 +103,50 @@ function SoundVizSettings({ config, onUpdate }) {
           step="0.1"
           value={config.sensitivity || 1.0}
           onChange={(e) => handleChange('sensitivity', parseFloat(e.target.value))}
+          disabled={saving}
+          style={{ width: '100%' }}
+        />
+      </div>
+
+      <div className="form-group">
+        <label>性能档位</label>
+        <div className="style-selector">
+          {PERFORMANCE_MODES.map((mode) => (
+            <div
+              key={mode.id}
+              className={`style-option ${config.performance_mode === mode.id ? 'active' : ''}`}
+              onClick={() => handleChange('performance_mode', mode.id)}
+            >
+              <div>{mode.name}</div>
+              <div style={{ fontSize: '0.75rem', marginTop: '4px' }}>{mode.desc}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="form-group">
+        <label>目标帧率: {config.fps || 30} FPS</label>
+        <input
+          type="range"
+          min="15"
+          max="60"
+          step="5"
+          value={config.fps || 30}
+          onChange={(e) => handleChange('fps', parseInt(e.target.value, 10))}
+          disabled={saving}
+          style={{ width: '100%' }}
+        />
+      </div>
+
+      <div className="form-group">
+        <label>渲染比例: {((config.render_scale || 0.8) * 100).toFixed(0)}%</label>
+        <input
+          type="range"
+          min="0.5"
+          max="1.0"
+          step="0.1"
+          value={config.render_scale || 0.8}
+          onChange={(e) => handleChange('render_scale', parseFloat(e.target.value))}
           disabled={saving}
           style={{ width: '100%' }}
         />

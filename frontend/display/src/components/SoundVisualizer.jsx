@@ -1,327 +1,398 @@
 import { useEffect, useRef, useCallback } from 'react'
 
-function SoundVisualizer({ style = 'bar', color = '#00ff88', sensitivity = 1.0 }) {
+const PERFORMANCE_PRESETS = {
+  power_save: {
+    fftSize: 512,
+    barCount: 28,
+    circularBars: 48,
+    waveSamples: 80,
+    shadowBlur: 0,
+    trailAlpha: 0.22,
+  },
+  balanced: {
+    fftSize: 1024,
+    barCount: 40,
+    circularBars: 72,
+    waveSamples: 128,
+    shadowBlur: 8,
+    trailAlpha: 0.16,
+  },
+  quality: {
+    fftSize: 2048,
+    barCount: 56,
+    circularBars: 96,
+    waveSamples: 192,
+    shadowBlur: 12,
+    trailAlpha: 0.12,
+  },
+}
+
+const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value))
+
+function SoundVisualizer({
+  style = 'bar',
+  color = '#00ff88',
+  sensitivity = 1.0,
+  performanceMode = 'balanced',
+  fps = 30,
+  renderScale = 0.8,
+}) {
   const canvasRef = useRef(null)
   const audioCtxRef = useRef(null)
   const analyserRef = useRef(null)
   const streamRef = useRef(null)
   const animFrameRef = useRef(null)
+  const freqDataRef = useRef(null)
+  const timeDataRef = useRef(null)
+  const timeLabelRef = useRef({ second: '', text: '' })
+  const gradientCacheRef = useRef({})
+  const frameStateRef = useRef({ lastFrame: 0 })
 
-  const drawTime = useCallback((ctx, canvas, x, y, fontSize) => {
+  const getPreset = useCallback(() => {
+    return PERFORMANCE_PRESETS[performanceMode] || PERFORMANCE_PRESETS.balanced
+  }, [performanceMode])
+
+  const getTimeLabel = useCallback(() => {
     const now = new Date()
-    const h = String(now.getHours()).padStart(2, '0')
-    const m = String(now.getMinutes()).padStart(2, '0')
-    const s = String(now.getSeconds()).padStart(2, '0')
-    const timeStr = `${h}:${m}:${s}`
+    const secondKey = `${now.getHours()}:${now.getMinutes()}:${now.getSeconds()}`
+    if (timeLabelRef.current.second !== secondKey) {
+      const h = String(now.getHours()).padStart(2, '0')
+      const m = String(now.getMinutes()).padStart(2, '0')
+      const s = String(now.getSeconds()).padStart(2, '0')
+      timeLabelRef.current = { second: secondKey, text: `${h}:${m}:${s}` }
+    }
+    return timeLabelRef.current.text
+  }, [])
 
+  const drawTime = useCallback((ctx, width, height, x, y, fontSize) => {
     ctx.save()
     ctx.font = `200 ${fontSize}px 'Segoe UI', sans-serif`
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillStyle = color === 'rainbow' ? '#ffffff55' : color + '55'
-    ctx.fillText(timeStr, x, y)
+    ctx.fillStyle = color === 'rainbow' ? 'rgba(255, 255, 255, 0.35)' : `${color}55`
+    ctx.fillText(getTimeLabel(), x, y, width * 0.9)
     ctx.restore()
-  }, [color])
+  }, [color, getTimeLabel])
 
-  const getColor = useCallback((t, alpha) => {
-    if (color !== 'rainbow') {
-      return color + Math.round(alpha * 255).toString(16).padStart(2, '0')
+  const getRainbowGradient = useCallback((ctx, width, height, direction = 'vertical') => {
+    const cacheKey = `${direction}-${width}-${height}`
+    if (gradientCacheRef.current[cacheKey]) {
+      return gradientCacheRef.current[cacheKey]
     }
-    // Rainbow: t is 0..1 position
+
+    const gradient = direction === 'horizontal'
+      ? ctx.createLinearGradient(0, 0, width, 0)
+      : ctx.createLinearGradient(0, height, 0, 0)
+
+    gradient.addColorStop(0, '#ff3366')
+    gradient.addColorStop(0.2, '#ffaa00')
+    gradient.addColorStop(0.4, '#00ff88')
+    gradient.addColorStop(0.6, '#00ffff')
+    gradient.addColorStop(0.8, '#00b4ff')
+    gradient.addColorStop(1, '#aa44ff')
+
+    gradientCacheRef.current[cacheKey] = gradient
+    return gradient
+  }, [])
+
+  const getRainbowColor = useCallback((t, alpha = 1) => {
     const hue = (t * 360) % 360
     return `hsla(${hue}, 100%, 55%, ${alpha})`
-  }, [color])
+  }, [])
 
-  const getRainbowColor = useCallback((t) => {
-    if (color !== 'rainbow') return color
-    const hue = (t * 360) % 360
-    return `hsl(${hue}, 100%, 55%)`
-  }, [color])
+  const clearFrame = useCallback((ctx, width, height, alpha) => {
+    ctx.fillStyle = `rgba(0, 0, 0, ${alpha})`
+    ctx.fillRect(0, 0, width, height)
+  }, [])
 
-  const drawBar = useCallback((analyser, canvas, ctx) => {
-    const bufferLength = analyser.frequencyBinCount
-    const dataArray = new Uint8Array(bufferLength)
+  const drawBar = useCallback((ctx, analyser, width, height, preset) => {
+    const dataArray = freqDataRef.current
     analyser.getByteFrequencyData(dataArray)
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.15)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    clearFrame(ctx, width, height, preset.trailAlpha)
 
-    const barCount = 64
-    const gap = 3
-    const barWidth = (canvas.width - gap * (barCount - 1)) / barCount
-    const step = Math.floor(bufferLength / barCount)
+    const barCount = preset.barCount
+    const gap = Math.max(2, width * 0.004)
+    const barWidth = (width - gap * (barCount - 1)) / barCount
+    const step = Math.max(1, Math.floor(dataArray.length / barCount))
+    const fill = color === 'rainbow' ? getRainbowGradient(ctx, width, height) : color
 
+    ctx.fillStyle = fill
     for (let i = 0; i < barCount; i++) {
       let sum = 0
+      const baseIndex = i * step
       for (let j = 0; j < step; j++) {
-        sum += dataArray[i * step + j]
+        sum += dataArray[baseIndex + j] || 0
       }
       const avg = (sum / step) * sensitivity
-      const barHeight = (avg / 255) * canvas.height * 0.85
-
+      const barHeight = clamp((avg / 255) * height * 0.82, 6, height * 0.82)
       const x = i * (barWidth + gap)
-      const y = canvas.height - barHeight
-
-      if (color === 'rainbow') {
-        const gradient = ctx.createLinearGradient(x, canvas.height, x, y)
-        gradient.addColorStop(0, getColor(i / barCount, 1))
-        gradient.addColorStop(1, getColor(i / barCount, 0.2))
-        ctx.fillStyle = gradient
-      } else {
-        const gradient = ctx.createLinearGradient(x, canvas.height, x, y)
-        gradient.addColorStop(0, color)
-        gradient.addColorStop(1, color + '33')
-        ctx.fillStyle = gradient
-      }
-
-      ctx.beginPath()
-      const radius = Math.min(barWidth / 2, 4)
-      ctx.moveTo(x + radius, y)
-      ctx.lineTo(x + barWidth - radius, y)
-      ctx.quadraticCurveTo(x + barWidth, y, x + barWidth, y + radius)
-      ctx.lineTo(x + barWidth, canvas.height)
-      ctx.lineTo(x, canvas.height)
-      ctx.lineTo(x, y + radius)
-      ctx.quadraticCurveTo(x, y, x + radius, y)
-      ctx.fill()
+      ctx.globalAlpha = clamp(0.45 + avg / 255, 0.45, 1)
+      ctx.fillRect(x, height - barHeight, barWidth, barHeight)
     }
+    ctx.globalAlpha = 1
 
-    // Time at top center
-    drawTime(ctx, canvas, canvas.width / 2, canvas.height * 0.12, canvas.height * 0.06)
-  }, [color, sensitivity, drawTime])
+    drawTime(ctx, width, height, width / 2, height * 0.12, height * 0.06)
+  }, [clearFrame, color, drawTime, getRainbowGradient, sensitivity])
 
-  const drawCircular = useCallback((analyser, canvas, ctx) => {
-    const bufferLength = analyser.frequencyBinCount
-    const dataArray = new Uint8Array(bufferLength)
+  const drawCircular = useCallback((ctx, analyser, width, height, preset) => {
+    const dataArray = freqDataRef.current
     analyser.getByteFrequencyData(dataArray)
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.1)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    clearFrame(ctx, width, height, preset.trailAlpha * 0.8)
 
-    const cx = canvas.width / 2
-    const cy = canvas.height / 2
-    const baseRadius = Math.min(cx, cy) * 0.25
-    const maxRadius = Math.min(cx, cy) * 0.7
-    const bars = 128
-    const step = Math.floor(bufferLength / bars)
+    const cx = width / 2
+    const cy = height / 2
+    const baseRadius = Math.min(cx, cy) * 0.24
+    const maxRadius = Math.min(cx, cy) * 0.62
+    const bars = preset.circularBars
+    const step = Math.max(1, Math.floor(dataArray.length / bars))
+    const lineWidth = Math.max(1.5, (Math.PI * 2 * baseRadius) / bars * 0.72)
 
+    ctx.lineCap = 'round'
+    ctx.lineWidth = lineWidth
     for (let i = 0; i < bars; i++) {
-      const angle = (i / bars) * Math.PI * 2 - Math.PI / 2
       let sum = 0
+      const baseIndex = i * step
       for (let j = 0; j < step; j++) {
-        sum += dataArray[i * step + j]
+        sum += dataArray[baseIndex + j] || 0
       }
       const avg = (sum / step) * sensitivity
-      const barLen = (avg / 255) * (maxRadius - baseRadius)
-
+      const length = (avg / 255) * (maxRadius - baseRadius)
+      const angle = (i / bars) * Math.PI * 2 - Math.PI / 2
       const x1 = cx + Math.cos(angle) * baseRadius
       const y1 = cy + Math.sin(angle) * baseRadius
-      const x2 = cx + Math.cos(angle) * (baseRadius + barLen)
-      const y2 = cy + Math.sin(angle) * (baseRadius + barLen)
+      const x2 = cx + Math.cos(angle) * (baseRadius + length)
+      const y2 = cy + Math.sin(angle) * (baseRadius + length)
 
-      const alpha = 0.3 + (avg / 255) * 0.7
-      ctx.strokeStyle = getColor(i / bars, alpha)
-      ctx.lineWidth = Math.max(1, (Math.PI * 2 * baseRadius) / bars * 0.6)
-      ctx.lineCap = 'round'
+      ctx.strokeStyle = color === 'rainbow'
+        ? getRainbowColor(i / bars, clamp(0.35 + avg / 255, 0.35, 1))
+        : color
+      ctx.globalAlpha = color === 'rainbow' ? 1 : clamp(0.3 + avg / 255, 0.3, 1)
       ctx.beginPath()
       ctx.moveTo(x1, y1)
       ctx.lineTo(x2, y2)
       ctx.stroke()
     }
+    ctx.globalAlpha = 1
 
-    // Inner circle glow
-    const glowGradient = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius)
-    glowGradient.addColorStop(0, color === 'rainbow' ? 'rgba(255,255,255,0.13)' : color + '22')
-    glowGradient.addColorStop(1, 'transparent')
-    ctx.fillStyle = glowGradient
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, baseRadius)
+    glow.addColorStop(0, color === 'rainbow' ? 'rgba(255,255,255,0.12)' : `${color}22`)
+    glow.addColorStop(1, 'transparent')
+    ctx.fillStyle = glow
     ctx.beginPath()
     ctx.arc(cx, cy, baseRadius, 0, Math.PI * 2)
     ctx.fill()
 
-    // Time at center of circle
-    drawTime(ctx, canvas, cx, cy, canvas.height * 0.045)
-  }, [color, sensitivity, drawTime])
+    drawTime(ctx, width, height, cx, cy, height * 0.045)
+  }, [clearFrame, color, drawTime, getRainbowColor, sensitivity])
 
-  const drawWave = useCallback((analyser, canvas, ctx) => {
-    const bufferLength = analyser.fftSize
-    const dataArray = new Uint8Array(bufferLength)
+  const traceWave = useCallback((ctx, dataArray, width, centerY, amplitude, offset, step) => {
+    let x = 0
+    ctx.beginPath()
+    for (let i = 0; i < dataArray.length; i += step) {
+      const v = (dataArray[i] / 128 - 1 + offset) * sensitivity
+      const y = centerY + v * amplitude
+      if (x === 0) ctx.moveTo(0, y)
+      else ctx.lineTo(x, y)
+      x += width / Math.ceil(dataArray.length / step)
+    }
+    ctx.stroke()
+  }, [sensitivity])
+
+  const drawWave = useCallback((ctx, analyser, width, height, preset) => {
+    const dataArray = timeDataRef.current
     analyser.getByteTimeDomainData(dataArray)
 
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'
-    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    clearFrame(ctx, width, height, preset.trailAlpha * 0.65)
 
-    const centerY = canvas.height * 0.55
-    const amplitude = canvas.height * 0.25
-
-    // Draw 3 layers with different opacity
+    const centerY = height * 0.55
+    const amplitude = height * 0.24
+    const step = Math.max(1, Math.floor(dataArray.length / preset.waveSamples))
+    const gradient = color === 'rainbow' ? getRainbowGradient(ctx, width, height, 'horizontal') : null
     const layers = [
-      { offset: 0, alpha: 0.8, lineWidth: 3 },
-      { offset: -0.02, alpha: 0.4, lineWidth: 2 },
-      { offset: 0.02, alpha: 0.4, lineWidth: 2 },
+      { offset: 0, alpha: 0.85, lineWidth: 2.4 },
+      { offset: -0.02, alpha: 0.4, lineWidth: 1.6 },
+      { offset: 0.02, alpha: 0.4, lineWidth: 1.6 },
     ]
 
+    if (preset.shadowBlur > 0) {
+      ctx.shadowColor = color === 'rainbow' ? '#ffffff' : color
+      ctx.shadowBlur = preset.shadowBlur
+    }
+
     for (const layer of layers) {
-      const sliceWidth = canvas.width / bufferLength
-      let x = 0
-
-      if (color === 'rainbow') {
-        // Draw rainbow wave as segments
-        for (let i = 0; i < bufferLength - 1; i++) {
-          const v = (dataArray[i] / 128.0 - 1.0 + layer.offset) * sensitivity
-          const y = centerY + v * amplitude
-          const vNext = (dataArray[i + 1] / 128.0 - 1.0 + layer.offset) * sensitivity
-          const yNext = centerY + vNext * amplitude
-
-          ctx.beginPath()
-          ctx.strokeStyle = getColor(i / bufferLength, layer.alpha)
-          ctx.lineWidth = layer.lineWidth
-          ctx.moveTo(x, y)
-          ctx.lineTo(x + sliceWidth, yNext)
-          ctx.stroke()
-          x += sliceWidth
-        }
-      } else {
-        ctx.beginPath()
-        ctx.strokeStyle = color + Math.round(layer.alpha * 255).toString(16).padStart(2, '0')
-        ctx.lineWidth = layer.lineWidth
-        let lx = 0
-        for (let i = 0; i < bufferLength; i++) {
-          const v = (dataArray[i] / 128.0 - 1.0 + layer.offset) * sensitivity
-          const y = centerY + v * amplitude
-          if (i === 0) ctx.moveTo(lx, y)
-          else ctx.lineTo(lx, y)
-          lx += sliceWidth
-        }
-        ctx.stroke()
-      }
+      ctx.lineWidth = layer.lineWidth
+      ctx.globalAlpha = layer.alpha
+      ctx.strokeStyle = gradient || color
+      traceWave(ctx, dataArray, width, centerY, amplitude, layer.offset, step)
     }
 
-    // Glow effect on the main line
-    const shadowColor = color === 'rainbow' ? '#ffffff' : color
-    ctx.shadowColor = shadowColor
-    ctx.shadowBlur = 15
-    if (color === 'rainbow') {
-      const sliceWidth = canvas.width / bufferLength
-      let gx = 0
-      for (let i = 0; i < bufferLength - 1; i++) {
-        const v = (dataArray[i] / 128.0 - 1.0) * sensitivity
-        const y = centerY + v * amplitude
-        const vNext = (dataArray[i + 1] / 128.0 - 1.0) * sensitivity
-        const yNext = centerY + vNext * amplitude
-        ctx.beginPath()
-        ctx.strokeStyle = getColor(i / bufferLength, 0.7)
-        ctx.lineWidth = 2
-        ctx.moveTo(gx, y)
-        ctx.lineTo(gx + sliceWidth, yNext)
-        ctx.stroke()
-        gx += sliceWidth
-      }
-    } else {
-      ctx.beginPath()
-      ctx.strokeStyle = color + 'aa'
-      ctx.lineWidth = 2
-      let gx = 0
-      for (let i = 0; i < bufferLength; i++) {
-        const v = (dataArray[i] / 128.0 - 1.0) * sensitivity
-        const y = centerY + v * amplitude
-        if (i === 0) ctx.moveTo(gx, y)
-        else ctx.lineTo(gx, y)
-        gx += canvas.width / bufferLength
-      }
-      ctx.stroke()
-    }
     ctx.shadowBlur = 0
+    ctx.globalAlpha = 1
 
-    // Time at top center
-    drawTime(ctx, canvas, canvas.width / 2, canvas.height * 0.12, canvas.height * 0.06)
-  }, [color, sensitivity, drawTime])
+    drawTime(ctx, width, height, width / 2, height * 0.12, height * 0.06)
+  }, [clearFrame, color, drawTime, getRainbowGradient, traceWave])
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return
+    if (!canvas) return undefined
 
-    const ctx = canvas.getContext('2d')
+    const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true })
+    if (!ctx) return undefined
+
+    const targetScale = clamp(renderScale, 0.5, 1)
+    const deviceRatio = clamp((window.devicePixelRatio || 1) * targetScale, 0.5, 1.25)
 
     const resizeCanvas = () => {
-      canvas.width = window.innerWidth
-      canvas.height = window.innerHeight
+      const cssWidth = window.innerWidth
+      const cssHeight = window.innerHeight
+      canvas.width = Math.max(1, Math.round(cssWidth * deviceRatio))
+      canvas.height = Math.max(1, Math.round(cssHeight * deviceRatio))
+      canvas.style.width = `${cssWidth}px`
+      canvas.style.height = `${cssHeight}px`
+      ctx.setTransform(deviceRatio, 0, 0, deviceRatio, 0, 0)
+      gradientCacheRef.current = {}
     }
+
     resizeCanvas()
     window.addEventListener('resize', resizeCanvas)
 
     let cancelled = false
 
+    const stopAudio = () => {
+      if (animFrameRef.current) {
+        cancelAnimationFrame(animFrameRef.current)
+        animFrameRef.current = null
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop())
+        streamRef.current = null
+      }
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close()
+        audioCtxRef.current = null
+      }
+      analyserRef.current = null
+      freqDataRef.current = null
+      timeDataRef.current = null
+    }
+
+    const renderFrame = (timestamp) => {
+      if (cancelled || document.hidden) {
+        animFrameRef.current = requestAnimationFrame(renderFrame)
+        return
+      }
+
+      const frameInterval = 1000 / clamp(fps, 15, 60)
+      if (timestamp - frameStateRef.current.lastFrame < frameInterval) {
+        animFrameRef.current = requestAnimationFrame(renderFrame)
+        return
+      }
+      frameStateRef.current.lastFrame = timestamp
+
+      const analyser = analyserRef.current
+      if (!analyser) {
+        animFrameRef.current = requestAnimationFrame(renderFrame)
+        return
+      }
+
+      const width = canvas.clientWidth || window.innerWidth
+      const height = canvas.clientHeight || window.innerHeight
+      const preset = getPreset()
+
+      if (style === 'circular') {
+        drawCircular(ctx, analyser, width, height, preset)
+      } else if (style === 'wave') {
+        drawWave(ctx, analyser, width, height, preset)
+      } else {
+        drawBar(ctx, analyser, width, height, preset)
+      }
+
+      animFrameRef.current = requestAnimationFrame(renderFrame)
+    }
+
     const startAudio = async () => {
       try {
+        const preset = getPreset()
         const stream = await navigator.mediaDevices.getUserMedia({
           audio: {
             echoCancellation: false,
             noiseSuppression: false,
             autoGainControl: false,
-          }
+            channelCount: 1,
+          },
         })
+
         if (cancelled) {
-          stream.getTracks().forEach(t => t.stop())
+          stream.getTracks().forEach((track) => track.stop())
           return
         }
-        streamRef.current = stream
 
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)()
-        audioCtxRef.current = audioCtx
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext
+        const audioOptions = { latencyHint: 'interactive' }
+        if (performanceMode === 'power_save') {
+          audioOptions.sampleRate = 22050
+        }
+        const audioCtx = new AudioContextClass(audioOptions)
+        const analyser = audioCtx.createAnalyser()
+        analyser.fftSize = preset.fftSize
+        analyser.smoothingTimeConstant = 0.72
+        analyser.minDecibels = -90
+        analyser.maxDecibels = -20
 
         const source = audioCtx.createMediaStreamSource(stream)
-        const analyser = audioCtx.createAnalyser()
-        analyser.fftSize = 2048
-        analyser.smoothingTimeConstant = 0.8
         source.connect(analyser)
+
+        streamRef.current = stream
+        audioCtxRef.current = audioCtx
         analyserRef.current = analyser
-
-        const draw = () => {
-          if (cancelled) return
-          animFrameRef.current = requestAnimationFrame(draw)
-
-          switch (style) {
-            case 'circular':
-              drawCircular(analyser, canvas, ctx)
-              break
-            case 'wave':
-              drawWave(analyser, canvas, ctx)
-              break
-            default:
-              drawBar(analyser, canvas, ctx)
-          }
-        }
-        draw()
+        freqDataRef.current = new Uint8Array(analyser.frequencyBinCount)
+        timeDataRef.current = new Uint8Array(analyser.fftSize)
+        frameStateRef.current.lastFrame = 0
+        animFrameRef.current = requestAnimationFrame(renderFrame)
       } catch (err) {
-        console.error('Microphone access denied:', err)
-        // Draw placeholder text
-        ctx.fillStyle = '#333'
-        ctx.fillRect(0, 0, canvas.width, canvas.height)
-        ctx.fillStyle = color
-        ctx.font = '3vw sans-serif'
-        ctx.textAlign = 'center'
-        ctx.fillText('请允许麦克风访问权限', canvas.width / 2, canvas.height / 2)
+        console.error('Microphone access failed:', err)
       }
     }
 
+    const handleVisibility = () => {
+      if (!document.hidden && audioCtxRef.current?.state === 'suspended') {
+        audioCtxRef.current.resume().catch(() => {})
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibility)
     startAudio()
 
     return () => {
       cancelled = true
+      document.removeEventListener('visibilitychange', handleVisibility)
       window.removeEventListener('resize', resizeCanvas)
-      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current)
-      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop())
-      if (audioCtxRef.current) audioCtxRef.current.close()
-      streamRef.current = null
-      audioCtxRef.current = null
-      analyserRef.current = null
+      stopAudio()
     }
-  }, [style, color, sensitivity, drawBar, drawCircular, drawWave])
+  }, [
+    color,
+    drawBar,
+    drawCircular,
+    drawWave,
+    fps,
+    getPreset,
+    performanceMode,
+    renderScale,
+    style,
+  ])
 
   return (
-    <div className="soundviz-container">
-      <canvas ref={canvasRef} />
-    </div>
+    <canvas
+      ref={canvasRef}
+      style={{
+        width: '100vw',
+        height: '100vh',
+        display: 'block',
+        background: '#000',
+      }}
+    />
   )
 }
 

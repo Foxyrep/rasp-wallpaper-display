@@ -14,7 +14,14 @@ const DEFAULT_CONFIG = {
   wallpaper: { images: [], auto_rotate: true, rotate_interval: 60 },
   clock: { style: 'circle12', show_date: true, show_weekday: true },
   weather: { enabled: false, show_days: 1 },
-  soundviz: { style: 'bar', color: '#00ff88', sensitivity: 1.0 },
+  soundviz: {
+    style: 'bar',
+    color: '#00ff88',
+    sensitivity: 1.0,
+    performance_mode: 'balanced',
+    fps: 30,
+    render_scale: 0.8,
+  },
 }
 
 function App() {
@@ -113,6 +120,9 @@ function App() {
           style={config.soundviz?.style || 'bar'}
           color={config.soundviz?.color || '#00ff88'}
           sensitivity={config.soundviz?.sensitivity || 1.0}
+          performanceMode={config.soundviz?.performance_mode || 'balanced'}
+          fps={config.soundviz?.fps || 30}
+          renderScale={config.soundviz?.render_scale || 0.8}
         />
       )
     }

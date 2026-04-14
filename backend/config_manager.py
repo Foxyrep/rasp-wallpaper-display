@@ -31,6 +31,9 @@ DEFAULT_CONFIG = {
         "style": "bar",       # "bar" | "circular" | "wave"
         "color": "#00ff88",
         "sensitivity": 1.0,
+        "performance_mode": "balanced",  # "power_save" | "balanced" | "quality"
+        "fps": 30,
+        "render_scale": 0.8,
     },
 }
 

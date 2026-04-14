@@ -122,3 +122,30 @@ SystemSettings.jsx — 模式下拉框新增”环境声可视化”选项
 - 彩色模式：通过HSL色轮映射实现RGB渐变，无需额外依赖
 
 ## v0.0.5待实现：
+- 音频可视化 资源占用优化。目前在2GB内存版本树莓派4B上运行的时候，音频波形渲染非常卡顿，推测为硬件资源占用过高，请就这个问题做优化，必要时可以使用第三方包
+
+## v0.0.5已实现功能：
+环境声可视化性能优化，重点改善树莓派 4B（2GB）上的卡顿问题
+
+后端 (backend/)
+- config_manager.py — soundviz 新增性能配置：`performance_mode`、`fps`、`render_scale`
+- routers/soundviz.py — 新增性能参数更新与数值钳制，避免异常配置导致渲染过载
+
+显示页面 (frontend/display/)
+- components/SoundVisualizer.jsx — 重构渲染循环，优化点包括：
+  - 复用频域/时域 `Uint8Array`，避免每帧重复分配内存
+  - 按目标 FPS 节流绘制，不再盲目追求 60fps
+  - 增加渲染比例缩放，可用较低内部画布分辨率换取更高流畅度
+  - 引入 `power_save / balanced / quality` 三档性能预设，自动调整 `fftSize`、柱/采样点数量、阴影强度
+  - `wave` 与 `circular` 模式显著降低采样密度与绘制复杂度
+  - 使用 `alpha: false`、`desynchronized: true` 的 Canvas 上下文，减轻合成压力
+  - 页面隐藏时暂停实际绘制，减少后台资源占用
+  - 缓存时间文本与彩虹渐变，减少重复计算
+
+控制面板 (frontend/control/)
+- components/SoundVizSettings.jsx — 新增性能档位、目标帧率、渲染比例三项可调设置
+
+优化结果：
+- 默认档位从“全分辨率 + 高频采样 + 高频重绘”改为更适合树莓派的均衡方案
+- 在不引入第三方库的前提下，显著降低 CPU / GPU / 内存带宽压力
+- 若设备性能较弱，可切换到“省电”档进一步提升流畅度
