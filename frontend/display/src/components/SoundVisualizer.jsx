@@ -28,6 +28,7 @@ const PERFORMANCE_PRESETS = {
 }
 
 const clamp = (value, minimum, maximum) => Math.max(minimum, Math.min(maximum, value))
+const lerp = (a, b, t) => a + (b - a) * t
 
 function SoundVisualizer({
   style = 'bar',
@@ -105,26 +106,43 @@ function SoundVisualizer({
     ctx.fillRect(0, 0, width, height)
   }, [])
 
+  const getFrequencyEnergy = useCallback((dataArray, index, totalCount) => {
+    const startT = Math.pow(index / totalCount, 1.8)
+    const endT = Math.pow((index + 1) / totalCount, 1.8)
+    const start = Math.floor(startT * dataArray.length)
+    const end = Math.max(start + 1, Math.floor(endT * dataArray.length))
+
+    let sum = 0
+    let count = 0
+    for (let i = start; i < end; i++) {
+      const shaped = dataArray[i] * (0.7 + (i / dataArray.length) * 1.1)
+      sum += shaped
+      count += 1
+    }
+
+    const avg = count > 0 ? sum / count : 0
+    const emphasis = lerp(0.82, 1.18, index / Math.max(1, totalCount - 1))
+    return clamp(avg * emphasis, 0, 255)
+  }, [])
+
   const drawBar = useCallback((ctx, analyser, width, height, preset) => {
     const dataArray = freqDataRef.current
     analyser.getByteFrequencyData(dataArray)
 
     clearFrame(ctx, width, height, preset.trailAlpha)
 
-    const barCount = preset.barCount
+    const mirroredCount = preset.barCount
+    const halfCount = Math.max(1, Math.floor(mirroredCount / 2))
     const gap = Math.max(2, width * 0.004)
-    const barWidth = (width - gap * (barCount - 1)) / barCount
-    const step = Math.max(1, Math.floor(dataArray.length / barCount))
+    const barWidth = (width - gap * (mirroredCount - 1)) / mirroredCount
     const fill = color === 'rainbow' ? getRainbowGradient(ctx, width, height) : color
+    const centerIndex = (mirroredCount - 1) / 2
 
     ctx.fillStyle = fill
-    for (let i = 0; i < barCount; i++) {
-      let sum = 0
-      const baseIndex = i * step
-      for (let j = 0; j < step; j++) {
-        sum += dataArray[baseIndex + j] || 0
-      }
-      const avg = (sum / step) * sensitivity
+    for (let i = 0; i < mirroredCount; i++) {
+      const mirroredIndex = i <= centerIndex ? centerIndex - i : i - centerIndex
+      const bandIndex = Math.min(halfCount - 1, Math.floor(mirroredIndex))
+      const avg = getFrequencyEnergy(dataArray, bandIndex, halfCount) * sensitivity
       const barHeight = clamp((avg / 255) * height * 0.82, 6, height * 0.82)
       const x = i * (barWidth + gap)
       ctx.globalAlpha = clamp(0.45 + avg / 255, 0.45, 1)
@@ -133,7 +151,7 @@ function SoundVisualizer({
     ctx.globalAlpha = 1
 
     drawTime(ctx, width, height, width / 2, height * 0.12, height * 0.06)
-  }, [clearFrame, color, drawTime, getRainbowGradient, sensitivity])
+  }, [clearFrame, color, drawTime, getFrequencyEnergy, getRainbowGradient, sensitivity])
 
   const drawCircular = useCallback((ctx, analyser, width, height, preset) => {
     const dataArray = freqDataRef.current
@@ -146,18 +164,14 @@ function SoundVisualizer({
     const baseRadius = Math.min(cx, cy) * 0.24
     const maxRadius = Math.min(cx, cy) * 0.62
     const bars = preset.circularBars
-    const step = Math.max(1, Math.floor(dataArray.length / bars))
     const lineWidth = Math.max(1.5, (Math.PI * 2 * baseRadius) / bars * 0.72)
 
     ctx.lineCap = 'round'
     ctx.lineWidth = lineWidth
     for (let i = 0; i < bars; i++) {
-      let sum = 0
-      const baseIndex = i * step
-      for (let j = 0; j < step; j++) {
-        sum += dataArray[baseIndex + j] || 0
-      }
-      const avg = (sum / step) * sensitivity
+      const normalizedIndex = i <= bars / 2 ? i : bars - i
+      const bandIndex = Math.floor((normalizedIndex / (bars / 2)) * Math.max(1, Math.floor(bars / 2) - 1))
+      const avg = getFrequencyEnergy(dataArray, bandIndex, Math.max(1, Math.floor(bars / 2))) * sensitivity
       const length = (avg / 255) * (maxRadius - baseRadius)
       const angle = (i / bars) * Math.PI * 2 - Math.PI / 2
       const x1 = cx + Math.cos(angle) * baseRadius
@@ -185,7 +199,7 @@ function SoundVisualizer({
     ctx.fill()
 
     drawTime(ctx, width, height, cx, cy, height * 0.045)
-  }, [clearFrame, color, drawTime, getRainbowColor, sensitivity])
+  }, [clearFrame, color, drawTime, getFrequencyEnergy, getRainbowColor, sensitivity])
 
   const traceWave = useCallback((ctx, dataArray, width, centerY, amplitude, offset, step) => {
     let x = 0
@@ -220,6 +234,18 @@ function SoundVisualizer({
       ctx.shadowColor = color === 'rainbow' ? '#ffffff' : color
       ctx.shadowBlur = preset.shadowBlur
     }
+
+    ctx.save()
+    ctx.translate(width / 2, 0)
+    ctx.scale(-1, 1)
+    ctx.translate(-width / 2, 0)
+    for (const layer of layers.slice().reverse()) {
+      ctx.lineWidth = layer.lineWidth
+      ctx.globalAlpha = layer.alpha * 0.35
+      ctx.strokeStyle = gradient || color
+      traceWave(ctx, dataArray, width, centerY, amplitude, layer.offset, step)
+    }
+    ctx.restore()
 
     for (const layer of layers) {
       ctx.lineWidth = layer.lineWidth
